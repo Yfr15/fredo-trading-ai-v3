@@ -1,6 +1,6 @@
 'use strict';
 const http=require('node:http'),fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
-const PORT=Number(process.env.PORT||3000), HOST=process.env.HOST||'127.0.0.1';
+const PORT=Number(process.env.PORT||3000), HOST='0.0.0.0';
 const MODE=process.env.DATA_MODE==='provider'?'provider':'demo';
 const SYMBOLS=['AAPL_otc','META_otc','TSLA_otc','AMZN_otc','MSFT_otc'];
 const CANDLE_MS=5000,MAX_CANDLES=400,STALE_MS=12000;
