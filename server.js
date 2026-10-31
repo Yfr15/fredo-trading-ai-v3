@@ -42,6 +42,22 @@ const server=http.createServer((req,res)=>{let url;try{url=new URL(req.url,'http
  res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
  if(req.method!=='GET')return send(res,405,{error:'Read-only API'});
  if(url.pathname==='/api/otcharts-test'){
+if(url.pathname==='/api/env-check'){
+  const key=process.env.OTCHARTS_API_KEY;
+  return send(res,200,{
+    keyPresent:typeof key==='string',
+    keyNonEmpty:typeof key==='string'&&key.trim().length>0
+  });
+}
+  
+if(url.pathname==='/api/env-check'){
+  const key=process.env.OTCHARTS_API_KEY;
+  return send(res,200,{
+    keyPresent:typeof key==='string',
+    keyNonEmpty:typeof key==='string'&&key.trim().length>0
+  });
+}
+  
   const key=process.env.OTCHARTS_API_KEY;
   if(!key)return send(res,503,{ok:false,error:'OTCHARTS_API_KEY not configured'});
   (async()=>{
