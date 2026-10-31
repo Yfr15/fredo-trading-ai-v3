@@ -50,8 +50,9 @@ if(url.pathname==='/api/env-check'){
   });
 }
   
+if(url.pathname==='/api/otcharts-test'){  
   
-  const key=process.env.OTCHARTS_API_KEY;
+                                           const key=process.env.OTCHARTS_API_KEY;
   if(!key)return send(res,503,{ok:false,error:'OTCHARTS_API_KEY not configured'});
   (async()=>{
     try{
