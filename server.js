@@ -41,6 +41,42 @@ const files={'/':'index.html','/index.html':'index.html','/app.js':'app.js','/st
 const server=http.createServer((req,res)=>{let url;try{url=new URL(req.url,'http://localhost')}catch{return send(res,400,{error:'Bad URL'})}
  res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
  if(req.method!=='GET')return send(res,405,{error:'Read-only API'});
+ if(url.pathname==='/api/otcharts-test'){
+  const key=process.env.OTCHARTS_API_KEY;
+  if(!key)return send(res,503,{ok:false,error:'OTCHARTS_API_KEY not configured'});
+  (async()=>{
+    try{
+      const endpoint='https://otcharts.com/v1/candles?venue=otc&symbol=EURUSD_otc&timeframe=1m&limit=5';
+      const response=await fetch(endpoint,{
+        headers:{Authorization:'Bearer '+key,Accept:'application/json'},
+        signal:AbortSignal.timeout(8000)
+      });
+      if(!response.ok)return send(res,502,{ok:false,providerStatus:response.status,error:'OTCharts request unsuccessful'});
+      const data=await response.json();
+      const rows=Array.isArray(data)?data:Array.isArray(data.candles)?data.candles:Array.isArray(data.data)?data.data:null;
+      return send(res,200,{
+        ok:true,
+        source:'OTCharts historical',
+        symbol:'EURUSD_otc',
+        timeframe:'1m',
+        count:rows?.length??null,
+        responseFields:Array.isArray(data)?['array']:Object.keys(data).slice(0,12),
+        sample:rows?.slice(0,2).map(c=>({
+          time:c.time??c.timestamp??null,
+          open:c.open??null,
+          high:c.high??null,
+          low:c.low??null,
+          close:c.close??null
+        }))??null,
+        notice:'Historical data only. No live trading or execution.'
+      });
+    }catch(err){
+      return send(res,502,{ok:false,error:err.name==='TimeoutError'?'Provider timeout':'Unable to retrieve provider data'});
+    }
+  })();
+  return;
+ }
+  
  if(url.pathname==='/api/config')return send(res,200,{mode:MODE,symbols:SYMBOLS,candleSeconds:5,staleAfterSeconds:STALE_MS/1000,disclaimer:'Research/demo only. No trading execution.'});
  if(url.pathname==='/api/market'){const sym=url.searchParams.get('symbol');return SYMBOLS.includes(sym)?send(res,200,snapshot(sym)):send(res,400,{error:'Unsupported symbol'});}
  if(url.pathname==='/api/stream'){const sym=url.searchParams.get('symbol');if(!SYMBOLS.includes(sym))return send(res,400,{error:'Unsupported symbol'});
