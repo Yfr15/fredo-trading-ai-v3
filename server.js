@@ -41,7 +41,7 @@ const files={'/':'index.html','/index.html':'index.html','/app.js':'app.js','/st
 const server=http.createServer((req,res)=>{let url;try{url=new URL(req.url,'http://localhost')}catch{return send(res,400,{error:'Bad URL'})}
  res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
  if(req.method!=='GET')return send(res,405,{error:'Read-only API'});
- if(url.pathname==='/api/otcharts-test'){
+ 
 if(url.pathname==='/api/env-check'){
   const key=process.env.OTCHARTS_API_KEY;
   return send(res,200,{
