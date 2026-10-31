@@ -50,13 +50,6 @@ if(url.pathname==='/api/env-check'){
   });
 }
   
-if(url.pathname==='/api/env-check'){
-  const key=process.env.OTCHARTS_API_KEY;
-  return send(res,200,{
-    keyPresent:typeof key==='string',
-    keyNonEmpty:typeof key==='string'&&key.trim().length>0
-  });
-}
   
   const key=process.env.OTCHARTS_API_KEY;
   if(!key)return send(res,503,{ok:false,error:'OTCHARTS_API_KEY not configured'});
