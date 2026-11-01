@@ -65,44 +65,40 @@ if(url.pathname==='/api/env-check'){
   });
 }
   
-if(url.pathname==='/api/otcharts-test'){  
-  
-                                           const key=process.env.OTCHARTS_API_KEY;
+if(url.pathname==='/api/otcharts-test'){
+  const key=process.env.OTCHARTS_API_KEY;
   if(!key)return send(res,503,{ok:false,error:'OTCHARTS_API_KEY not configured'});
   (async()=>{
+    const headers={Authorization:'Bearer '+key,Accept:'application/json'};
+    const get=async(path)=>{
+      const response=await fetch('https://otcharts.com'+path,{headers,signal:AbortSignal.timeout(8000)});
+      let body={};try{body=await response.json()}catch{}
+      return {status:response.status,ok:response.ok,body};
+    };
     try{
-      const endpoint='https://otcharts.com/v1/candles?venue=otc&symbol=EURUSD_otc&timeframe=1m&limit=5';
-      const response=await fetch(endpoint,{
-        headers:{Authorization:'Bearer '+key,Accept:'application/json'},
-        signal:AbortSignal.timeout(8000)
-      });
-      if(!response.ok)return send(res,502,{ok:false,providerStatus:response.status,error:'OTCharts request unsuccessful'});
-      const data=await response.json();
-      const rows=Array.isArray(data)?data:Array.isArray(data.candles)?data.candles:Array.isArray(data.data)?data.data:null;
-      return send(res,200,{
-        ok:true,
-        source:'OTCharts historical',
-        symbol:'EURUSD_otc',
-        timeframe:'1m',
-        count:rows?.length??null,
-        responseFields:Array.isArray(data)?['array']:Object.keys(data).slice(0,12),
-        sample:rows?.slice(0,2).map(c=>({
-          time:c.time??c.timestamp??null,
-          open:c.open??null,
-          high:c.high??null,
-          low:c.low??null,
-          close:c.close??null
-        }))??null,
-        notice:'Historical data only. No live trading or execution.'
-      });
+      const venues=await get('/v1/venues');
+      if(!venues.ok)return send(res,200,{ok:false,stage:'venues',providerStatus:venues.status,providerError:venues.body.error||null,message:venues.status===402?'OTCharts recognizes the key but rejects the account plan. This is provider-side plan access, not a missing key.': 'Could not read the OTCharts venue list.'});
+      const otc=(venues.body.venues||[]).find(v=>v.id==='otc');
+      if(!otc||!otc.open)return send(res,200,{ok:false,stage:'venues',providerStatus:403,venueOpen:!!(otc&&otc.open),message:'The current API plan does not open the Pocket Option (otc) book.'});
+      const usage=await get('/v1/usage');
+      const catalogue=await get('/v1/symbols?venue=otc');
+      if(!catalogue.ok)return send(res,200,{ok:false,stage:'symbols',providerStatus:catalogue.status,providerError:catalogue.body.error||null,message:'The Pocket Option venue opened, but its symbol catalogue could not be read.'});
+      const symbols=Array.isArray(catalogue.body.symbols)?catalogue.body.symbols:[];
+      const selected=symbols.find(s=>s.symbol==='#AAPL_otc')||symbols.find(s=>s.symbol==='EURUSD_otc')||symbols[0];
+      if(!selected)return send(res,200,{ok:false,stage:'symbols',message:'The Pocket Option catalogue returned no instruments.'});
+      const candlePath='/v1/candles?venue=otc&symbol='+encodeURIComponent(selected.symbol)+'&tf=5&limit=5';
+      const candles=await get(candlePath);
+      if(!candles.ok)return send(res,200,{ok:false,stage:'candles',providerStatus:candles.status,providerError:candles.body.error||null,symbol:selected.symbol,message:'Venue and symbol access succeeded, but the five-second candle request failed.'});
+      const rows=Array.isArray(candles.body.candles)?candles.body.candles:[];
+      return send(res,200,{ok:true,stage:'complete',source:'OTCharts Pocket Option OTC',venueOpen:true,usage:usage.ok?usage.body:null,symbol:selected.symbol,symbolName:selected.name||null,timeframeSeconds:5,count:rows.length,sample:rows.slice(-2),notice:'Read-only market data test. No broker login or order placement.'});
     }catch(err){
-      return send(res,502,{ok:false,error:err.name==='TimeoutError'?'Provider timeout':'Unable to retrieve provider data'});
+      return send(res,200,{ok:false,stage:'network',error:err.name==='TimeoutError'?'OTCharts request timed out':'Unable to complete OTCharts diagnostic',message:'The server could not complete the provider request.'});
     }
   })();
   return;
- }
+}
   
- if(url.pathname==='/api/demo/status')return send(res,200,demoEngine.status());
+if(url.pathname==='/api/demo/status')return send(res,200,demoEngine.status());
  if(url.pathname==='/api/config')return send(res,200,{mode:MODE,symbols:SYMBOLS,candleSeconds:5,staleAfterSeconds:STALE_MS/1000,disclaimer:'Research/demo only. No trading execution.'});
  if(url.pathname==='/api/market'){const sym=url.searchParams.get('symbol');return SYMBOLS.includes(sym)?send(res,200,snapshot(sym)):send(res,400,{error:'Unsupported symbol'});}
  if(url.pathname==='/api/stream'){const sym=url.searchParams.get('symbol');if(!SYMBOLS.includes(sym))return send(res,400,{error:'Unsupported symbol'});
