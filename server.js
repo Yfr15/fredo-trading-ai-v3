@@ -2,7 +2,7 @@
 const http=require('node:http'),fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const PORT=Number(process.env.PORT||3000), HOST='0.0.0.0';
 const MODE=process.env.DATA_MODE==='provider'?'provider':'demo';
-const SYMBOLS=['AAPL_otc','META_otc','TSLA_otc','AMZN_otc','MSFT_otc'];
+const SYMBOLS=['AAPL_otc','AXP_otc','BA_otc','FB_otc','INTC_otc','JNJ_otc','MCD_otc','BABA_otc','COIN_otc','FDX_otc','NFLX_otc','PLTR_otc','AMD_otc','C_otc','XOM_otc','AMZN_otc','GME_otc','CSCO_otc'];
 const CANDLE_MS=5000,MAX_CANDLES=400,STALE_MS=12000;
 const states=new Map(),clients=new Set();
 const round=n=>Math.round(n*100000)/100000;
