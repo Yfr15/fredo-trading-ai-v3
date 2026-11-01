@@ -6,7 +6,37 @@ function connect(){if(stream)stream.close();last=null;const symbol=$('symbol').v
  stream=new EventSource('/api/stream?symbol='+encodeURIComponent(symbol));stream.addEventListener('market',event=>{try{render(JSON.parse(event.data))}catch{}});
  stream.onerror=()=>{$('feed').textContent='Connection interrupted';$('dot').className='dot bad';forceWait('Connection interrupted')};}
 function forceWait(reason){$('signal').textContent='WAIT';$('signal').className='';$('reason').textContent=reason;}
-function render(d){if(!d||d.symbol!==$('symbol').value)return;last=d;
+
+const SCORE_KEY='fredo-v3-signal-scorecard-v1';
+let scoreRows=[];
+try{scoreRows=JSON.parse(localStorage.getItem(SCORE_KEY)||'[]');if(!Array.isArray(scoreRows))scoreRows=[];}catch{scoreRows=[];}
+function saveScores(){try{localStorage.setItem(SCORE_KEY,JSON.stringify(scoreRows.slice(-100)));}catch{}}
+function updateScorecard(d){
+ const candles=d.candles||[];if(!candles.length)return;
+ const current=candles[candles.length-1],symbol=d.symbol;
+ // Resolve only after three later 5-second candles have completed.
+ for(const row of scoreRows){
+  if(row.symbol!==symbol||row.result!=='PENDING'||current.time<row.expiresAt)continue;
+  row.exit=Number(current.close);
+  row.result=row.exit===row.entry?'TIE':(row.direction==='UP'?row.exit>row.entry:row.exit<row.entry)?'WIN':'LOSS';
+  row.checkedAt=Date.now();
+ }
+ const already=scoreRows.some(r=>r.symbol===symbol&&r.candleTime===current.time);
+ if(!already&&['UP','DOWN'].includes(d.signal)&&!d.stale){
+  scoreRows.push({symbol,direction:d.signal,entry:Number(current.close),candleTime:current.time,expiresAt:current.time+15000,result:'PENDING'});
+  scoreRows=scoreRows.slice(-100);
+ }
+ saveScores();renderScorecard();
+}
+function renderScorecard(){
+ const recent=scoreRows.slice().reverse().slice(0,20),done=recent.filter(r=>r.result!=='PENDING'),wins=done.filter(r=>r.result==='WIN').length,losses=done.filter(r=>r.result==='LOSS').length,ties=done.filter(r=>r.result==='TIE').length;
+ $('score-total').textContent=done.length+' settled / '+recent.length+' tracked';
+ $('score-accuracy').textContent=done.length?((wins/done.length)*100).toFixed(1)+'%':'—';
+ $('score-record').textContent=wins+'W · '+losses+'L · '+ties+'T';
+ $('score-rows').innerHTML=recent.length?recent.map(r=>'<div class="trade-row"><b>'+r.symbol.replace('_otc',' OTC')+'</b><span>'+r.direction+'</span><span>'+r.result+'</span><span>'+r.entry.toFixed(5)+(r.exit===undefined?'':' → '+r.exit.toFixed(5))+'</span></div>').join(''):'No directional signals scored yet.';
+}
+
+function render(d){if(!d||d.symbol!==$('symbol').value)return;last=d;updateScorecard(d);
  $('price').textContent=d.candles.length?fmt(d.candles.at(-1).close):'—';$('updated').textContent=d.candles.length?new Date(d.candles.at(-1).time).toLocaleTimeString()+' · candle close':'No candles';
  $('macd').textContent=fmt(d.indicators.macd);$('momentum').textContent=fmt(d.indicators.momentum);$('osma').textContent=fmt(d.indicators.osma);$('count').textContent=d.count;
  const stale=d.stale||Date.now()-d.lastUpdate>12000||!d.connected;
