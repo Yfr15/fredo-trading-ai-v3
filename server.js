@@ -5,6 +5,8 @@ const MODE=process.env.DATA_MODE==='provider'?'provider':'demo';
 const SYMBOLS=['AAPL_otc','AXP_otc','BA_otc','FB_otc','INTC_otc','JNJ_otc','MCD_otc','BABA_otc','COIN_otc','FDX_otc','NFLX_otc','PLTR_otc','AMD_otc','C_otc','XOM_otc','AMZN_otc','GME_otc','CSCO_otc'];
 const CANDLE_MS=5000,MAX_CANDLES=400,STALE_MS=12000;
 const states=new Map(),clients=new Set();
+const {DemoEngine}=require('./demo-engine');
+const demoEngine=new DemoEngine();
 const round=n=>Math.round(n*100000)/100000;
 function ema(values,period){let out=Array(values.length).fill(null),alpha=2/(period+1),v=null;for(let i=0;i<values.length;i++){let x=values[i];if(!Number.isFinite(x))continue;v=v===null?x:v+alpha*(x-v);out[i]=v;}return out;}
 function indicators(candles){const close=candles.map(c=>c.close);if(close.length<40)return {macd:null,momentum:null,osma:null,signal:'WAIT',reason:'Warming up: need 40 candles'};
@@ -21,6 +23,7 @@ function pushCandle(symbol,c){let s=state(symbol);let candle={time:Number(c.time
  const prev=s.candles.at(-1);if(prev&&candle.time<prev.time)throw Error('Out-of-order candle');
  if(prev&&candle.time===prev.time)s.candles[s.candles.length-1]=candle;else s.candles.push(candle);
  s.candles=s.candles.slice(-MAX_CANDLES);s.lastUpdate=Date.now();s.error=null;s.seq++;
+ demoEngine.onCandle(symbol,candle,indicators(s.candles).signal,s.source);
  broadcast(symbol);}
 function snapshot(symbol){const s=state(symbol),age=s.lastUpdate?Date.now()-s.lastUpdate:null,stale=age===null||age>STALE_MS;let calc=indicators(s.candles);return {symbol,source:s.source,mode:MODE,serverTime:Date.now(),lastUpdate:s.lastUpdate,ageMs:age,stale,connected:!stale&&!s.error,signal:stale?'WAIT':calc.signal,reason:s.error|| (stale?'No recent candle; signals disabled':calc.reason),indicators:{macd:calc.macd,momentum:calc.momentum,osma:calc.osma},count:s.candles.length,candles:s.candles.slice(-100)};}
 function broadcast(symbol){const msg=`event: market\ndata: ${JSON.stringify(snapshot(symbol))}\n\n`;for(const c of clients){if(c.symbol===symbol){try{c.res.write(msg)}catch{clients.delete(c)}}}}
@@ -40,7 +43,19 @@ function send(res,status,data,headers={}){res.writeHead(status,{'Content-Type':'
 const files={'/':'index.html','/index.html':'index.html','/app.js':'app.js','/style.css':'style.css'};
 const server=http.createServer((req,res)=>{let url;try{url=new URL(req.url,'http://localhost')}catch{return send(res,400,{error:'Bad URL'})}
  res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; connect-src 'self'; img-src 'self' data:; base-uri 'none'; form-action 'none'; frame-ancestors 'none'");
- if(req.method!=='GET')return send(res,405,{error:'Read-only API'});
+ if(req.method==='POST'){
+  if(!url.pathname.startsWith('/api/demo/'))return send(res,405,{error:'Method not allowed'});
+  let raw='';req.on('data',chunk=>{raw+=chunk;if(raw.length>8192)req.destroy();});
+  req.on('end',()=>{let body={};try{body=raw?JSON.parse(raw):{};}catch{return send(res,400,{error:'Invalid JSON'});}
+    try{
+      if(url.pathname==='/api/demo/start')return send(res,200,demoEngine.start());
+      if(url.pathname==='/api/demo/stop')return send(res,200,demoEngine.stop());
+      if(url.pathname==='/api/demo/config')return send(res,200,demoEngine.configure(body));
+      return send(res,404,{error:'Not found'});
+    }catch(err){return send(res,400,{error:err.message,status:demoEngine.status()});}
+  });return;
+ }
+ if(req.method!=='GET')return send(res,405,{error:'Method not allowed'});
  
 if(url.pathname==='/api/env-check'){
   const key=process.env.OTCHARTS_API_KEY;
@@ -87,6 +102,7 @@ if(url.pathname==='/api/otcharts-test'){
   return;
  }
   
+ if(url.pathname==='/api/demo/status')return send(res,200,demoEngine.status());
  if(url.pathname==='/api/config')return send(res,200,{mode:MODE,symbols:SYMBOLS,candleSeconds:5,staleAfterSeconds:STALE_MS/1000,disclaimer:'Research/demo only. No trading execution.'});
  if(url.pathname==='/api/market'){const sym=url.searchParams.get('symbol');return SYMBOLS.includes(sym)?send(res,200,snapshot(sym)):send(res,400,{error:'Unsupported symbol'});}
  if(url.pathname==='/api/stream'){const sym=url.searchParams.get('symbol');if(!SYMBOLS.includes(sym))return send(res,400,{error:'Unsupported symbol'});
