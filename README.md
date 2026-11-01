@@ -1,6 +1,6 @@
 # Fredo Trading AI v3 — read-only OTC research dashboard
 
-A responsive iPhone Safari dashboard with a **Node.js 18+ backend**. It displays five separate OTC instruments, 5-second candles, MACD (12/26), Momentum (10), OsMA (MACD minus 9-period signal EMA), and UP/DOWN/WAIT research signals. No Pocket Option credentials, order placement, broker login, or trading automation.
+A responsive iPhone Safari dashboard with a **Node.js 18+ backend**. It displays 18 screenshot-identified OTC stock names, 5-second candles, MACD (12/26), Momentum (10), OsMA (MACD minus 9-period signal EMA), and UP/DOWN/WAIT research signals. It includes an autonomous simulated-trade engine with configurable stake, expiry, daily loss cap and consecutive-loss shutdown. No Pocket Option credentials, order placement, broker login, or live trading automation.
 
 ## Run locally
 
@@ -22,6 +22,12 @@ Set environment variables on the server (never in browser code):
 - `PROVIDER_API_KEY=...`
 
 Expected response: `{"candles":[{"time":1760000000000,"open":100.0,"high":100.2,"low":99.9,"close":100.1}]}`. Time is Unix milliseconds aligned to a 5-second boundary. Each record represents a **completed** 5-second candle. The backend polls each instrument every 5 seconds and never sends the key to Safari. Actual provider schemas, streaming capabilities, symbol identifiers, rate limits and licensing must be confirmed before wiring them up. Do not connect to unauthorized or undocumented endpoints.
+
+## Autonomous demo engine
+
+The dashboard's demo panel can run simulated positions automatically when the server is in its default synthetic DEMO mode. It records UP/DOWN entries, settles them after the selected number of 5-second candles, and reports demo P/L and observed win rate. Defaults: $1 virtual stake, 15-second expiry, $10 daily loss cap, three consecutive losses, and at most three open positions. Stake is capped at $5 and risk limits are configurable within conservative bounds. Start/stop/configuration endpoints are /api/demo/start, /api/demo/stop, and /api/demo/config; status is /api/demo/status.
+
+**These are not market trades.** Synthetic price movements are generated for software testing only. The reported win rate is not predictive and is not evidence of an edge. In provider mode, the engine deliberately refuses to open demo trades until a separate validated data adapter marks the data appropriately; provider prices are never silently treated as synthetic.
 
 ## Safety and data integrity
 
