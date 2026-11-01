@@ -8,9 +8,12 @@ function connect(){if(stream)stream.close();last=null;const symbol=$('symbol').v
 function forceWait(reason){$('signal').textContent='WAIT';$('signal').className='';$('reason').textContent=reason;}
 
 const SCORE_KEY='fredo-v3-signal-scorecard-v1';
+const SCORE_PEAK_KEY='fredo-v3-scorecard-peak-v1';
+let scorePeak=0;
+try{scorePeak=Number(localStorage.getItem(SCORE_PEAK_KEY)||0)||0;}catch{}
 let scoreRows=[];
 try{scoreRows=JSON.parse(localStorage.getItem(SCORE_KEY)||'[]');if(!Array.isArray(scoreRows))scoreRows=[];}catch{scoreRows=[];}
-function saveScores(){try{localStorage.setItem(SCORE_KEY,JSON.stringify(scoreRows.slice(-100)));}catch{}}
+function saveScores(){try{localStorage.setItem(SCORE_KEY,JSON.stringify(scoreRows.slice(-100)));localStorage.setItem(SCORE_PEAK_KEY,String(scorePeak));}catch{}}
 function updateScorecard(d){
  const candles=d.candles||[];if(!candles.length)return;
  const current=candles[candles.length-1],symbol=d.symbol;
@@ -30,9 +33,18 @@ function updateScorecard(d){
 }
 function renderScorecard(){
  const recent=scoreRows.slice().reverse().slice(0,20),done=recent.filter(r=>r.result!=='PENDING'),wins=done.filter(r=>r.result==='WIN').length,losses=done.filter(r=>r.result==='LOSS').length,ties=done.filter(r=>r.result==='TIE').length;
+ const last10=scoreRows.slice().reverse().slice(0,10).filter(r=>r.result!=='PENDING');
+ const last10Wins=last10.filter(r=>r.result==='WIN').length;
+ const accuracy=done.length?(wins/done.length)*100:0;
+ if(done.length&&accuracy>scorePeak){scorePeak=accuracy;saveScores();}
  $('score-total').textContent=done.length+' settled / '+recent.length+' tracked';
- $('score-accuracy').textContent=done.length?((wins/done.length)*100).toFixed(1)+'%':'—';
+ $('score-accuracy').textContent=done.length?accuracy.toFixed(1)+'%':'—';
  $('score-record').textContent=wins+'W · '+losses+'L · '+ties+'T';
+ $('score-peak').textContent=scorePeak?scorePeak.toFixed(1)+'%':'—';
+ $('score-last10').textContent=last10.length?(last10Wins+'/'+last10.length+' wins · '+(last10Wins/last10.length*100).toFixed(0)+'%'):'—';
+ const bySymbol={};scoreRows.filter(r=>r.result!=='PENDING').forEach(r=>{const s=r.symbol;(bySymbol[s]??={w:0,l:0,t:0}).w+=r.result==='WIN'?1:0;bySymbol[s].l+=r.result==='LOSS'?1:0;bySymbol[s].t+=r.result==='TIE'?1:0;});
+ const symbolRows=Object.entries(bySymbol).map(([s,v])=>({s,...v,n:v.w+v.l+v.t})).sort((a,b)=>b.n-a.n);
+ $('score-symbols').innerHTML=symbolRows.length?symbolRows.map(v=>'<div class="trade-row"><b>'+v.s.replace('_otc',' OTC')+'</b><span>'+v.w+'W · '+v.l+'L</span><span>'+v.t+'T</span><span>'+((v.w+v.l)?(v.w/(v.w+v.l)*100).toFixed(0)+'%':'—')+'</span></div>').join(''):'No settled symbol results yet.';
  $('score-rows').innerHTML=recent.length?recent.map(r=>'<div class="trade-row"><b>'+r.symbol.replace('_otc',' OTC')+'</b><span>'+r.direction+'</span><span>'+r.result+'</span><span>'+r.entry.toFixed(5)+(r.exit===undefined?'':' → '+r.exit.toFixed(5))+'</span></div>').join(''):'No directional signals scored yet.';
 }
 
