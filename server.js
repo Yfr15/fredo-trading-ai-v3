@@ -70,27 +70,30 @@ if(url.pathname==='/api/otcharts-test'){
   if(!key)return send(res,503,{ok:false,error:'OTCHARTS_API_KEY not configured'});
   (async()=>{
     const headers={Authorization:'Bearer '+key,Accept:'application/json'};
-    const get=async(path)=>{
-      const response=await fetch('https://otcharts.com'+path,{headers,signal:AbortSignal.timeout(8000)});
+    const get=async(apiPath)=>{
+      const response=await fetch('https://otcharts.com'+apiPath,{headers,signal:AbortSignal.timeout(8000)});
       let body={};try{body=await response.json()}catch{}
       return {status:response.status,ok:response.ok,body};
     };
     try{
       const venues=await get('/v1/venues');
-      if(!venues.ok)return send(res,200,{ok:false,stage:'venues',providerStatus:venues.status,providerError:venues.body.error||null,message:venues.status===402?'OTCharts recognizes the key but rejects the account plan. This is provider-side plan access, not a missing key.': 'Could not read the OTCharts venue list.'});
+      if(!venues.ok)return send(res,200,{ok:false,stage:'venues',providerStatus:venues.status,providerError:venues.body.error||null,message:venues.status===402?'OTCharts rejected this account plan (HTTP 402). The key reached OTCharts; this is not a missing-key error.':'Could not read the OTCharts venue list.'});
       const otc=(venues.body.venues||[]).find(v=>v.id==='otc');
-      if(!otc||!otc.open)return send(res,200,{ok:false,stage:'venues',providerStatus:403,venueOpen:!!(otc&&otc.open),message:'The current API plan does not open the Pocket Option (otc) book.'});
+      if(!otc||!otc.open)return send(res,200,{ok:false,stage:'venues',venueOpen:false,timeframes:otc?.timeframes||[],message:'This key does not currently have the Pocket Option OTC book open. Check the book selected for this key in your OTCharts account.'});
       const usage=await get('/v1/usage');
       const catalogue=await get('/v1/symbols?venue=otc');
-      if(!catalogue.ok)return send(res,200,{ok:false,stage:'symbols',providerStatus:catalogue.status,providerError:catalogue.body.error||null,message:'The Pocket Option venue opened, but its symbol catalogue could not be read.'});
-      const symbols=Array.isArray(catalogue.body.symbols)?catalogue.body.symbols:[];
-      const selected=symbols.find(s=>s.symbol==='#AAPL_otc')||symbols.find(s=>s.symbol==='EURUSD_otc')||symbols[0];
-      if(!selected)return send(res,200,{ok:false,stage:'symbols',message:'The Pocket Option catalogue returned no instruments.'});
-      const candlePath='/v1/candles?venue=otc&symbol='+encodeURIComponent(selected.symbol)+'&tf=5&limit=5';
-      const candles=await get(candlePath);
-      if(!candles.ok)return send(res,200,{ok:false,stage:'candles',providerStatus:candles.status,providerError:candles.body.error||null,symbol:selected.symbol,message:'Venue and symbol access succeeded, but the five-second candle request failed.'});
+      if(!catalogue.ok)return send(res,200,{ok:false,stage:'symbols',providerStatus:catalogue.status,providerError:catalogue.body.error||null,message:catalogue.status===403?'The OTC book is open, but this plan does not permit reading the symbol catalogue.':'Could not read the Pocket Option OTC symbol catalogue.'});
+      const all=Array.isArray(catalogue.body.symbols)?catalogue.body.symbols:[];
+      const freeIds=['EURUSD_otc','GBPUSD_otc','USDJPY_otc','BTCUSD_otc','AUDUSD_otc'];
+      const freeCandidates=freeIds.map(id=>all.find(x=>x.symbol===id)).filter(Boolean);
+      const available=freeCandidates.filter(x=>x.open!==false);
+      if(!available.length)return send(res,200,{ok:false,stage:'symbols',venueOpen:true,freeTierCandidates:freeCandidates.map(x=>({symbol:x.symbol,open:x.open??null})),message:'The OTC book is open, but none of the five documented free-tier instruments is currently listed as open. No stock OTC symbols were tested.'});
+      const selected=available[0];
+      const candles=await get('/v1/candles?venue=otc&symbol='+encodeURIComponent(selected.symbol)+'&tf=5&limit=5');
+      if(!candles.ok)return send(res,200,{ok:false,stage:'candles',providerStatus:candles.status,providerError:candles.body.error||null,symbol:selected.symbol,venueOpen:true,message:candles.status===403?'The OTC book is open, but this key cannot read the selected free-tier instrument.':'The venue and catalogue responded, but the five-second candle-history request failed.'});
       const rows=Array.isArray(candles.body.candles)?candles.body.candles:[];
-      return send(res,200,{ok:true,stage:'complete',source:'OTCharts Pocket Option OTC',venueOpen:true,usage:usage.ok?usage.body:null,symbol:selected.symbol,symbolName:selected.name||null,timeframeSeconds:5,count:rows.length,sample:rows.slice(-2),notice:'Read-only market data test. No broker login or order placement.'});
+      const valid=rows.filter(c=>[c.time,c.open,c.high,c.low,c.close].every(v=>Number.isFinite(Number(v))));
+      return send(res,200,{ok:valid.length>0,stage:'complete',source:'OTCharts Pocket Option OTC (read-only)',venueOpen:true,timeframes:otc.timeframes||[],usage:usage.ok?usage.body:null,freeTierCandidates:freeCandidates.map(x=>({symbol:x.symbol,open:x.open??null})),symbol:selected.symbol,timeframeSeconds:5,count:valid.length,sample:valid.slice(-2),liveStreamAvailable:false,notice:'The free API tier has no live streaming. This endpoint is a one-time diagnostic only; it does not connect to your Pocket Option account or place trades.'});
     }catch(err){
       return send(res,200,{ok:false,stage:'network',error:err.name==='TimeoutError'?'OTCharts request timed out':'Unable to complete OTCharts diagnostic',message:'The server could not complete the provider request.'});
     }
