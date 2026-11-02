@@ -5,7 +5,7 @@
   "description": "Read-only OTC signal research dashboard",
   "scripts": {
     "start": "node server.js",
-    "test": "node test.js && node autonomous-policy.test.js"
+    "test": "node test.js && node autonomous-policy.test.js && node strategy-lab.test.js"
   },
   "engines": {
     "node": ">=18"
