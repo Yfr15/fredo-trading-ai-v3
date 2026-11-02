@@ -23,7 +23,7 @@ function pushCandle(symbol,c){let s=state(symbol);let candle={time:Number(c.time
  const prev=s.candles.at(-1);if(prev&&candle.time<prev.time)throw Error('Out-of-order candle');
  if(prev&&candle.time===prev.time)s.candles[s.candles.length-1]=candle;else s.candles.push(candle);
  s.candles=s.candles.slice(-MAX_CANDLES);s.lastUpdate=Date.now();s.error=null;s.seq++;
- demoEngine.onCandle(symbol,candle,indicators(s.candles).signal,s.source);
+ demoEngine.onCandle(symbol,candle,indicators(s.candles).signal,s.source,s.candles);
  broadcast(symbol);}
 function snapshot(symbol){const s=state(symbol),age=s.lastUpdate?Date.now()-s.lastUpdate:null,stale=age===null||age>STALE_MS;let calc=indicators(s.candles);return {symbol,source:s.source,mode:MODE,serverTime:Date.now(),lastUpdate:s.lastUpdate,ageMs:age,stale,connected:!stale&&!s.error,signal:stale?'WAIT':calc.signal,reason:s.error|| (stale?'No recent candle; signals disabled':calc.reason),indicators:{macd:calc.macd,momentum:calc.momentum,osma:calc.osma},count:s.candles.length,candles:s.candles.slice(-100)};}
 function broadcast(symbol){const msg=`event: market\ndata: ${JSON.stringify(snapshot(symbol))}\n\n`;for(const c of clients){if(c.symbol===symbol){try{c.res.write(msg)}catch{clients.delete(c)}}}}
