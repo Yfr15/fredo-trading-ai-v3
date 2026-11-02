@@ -1,8 +1,9 @@
 'use strict';
 const http=require('node:http'),fs=require('node:fs'),path=require('node:path'),crypto=require('node:crypto');
 const PORT=Number(process.env.PORT||3000), HOST='0.0.0.0';
-const MODE=process.env.DATA_MODE==='provider'?'provider':'demo';
-const SYMBOLS=['AAPL_otc','AXP_otc','BA_otc','FB_otc','INTC_otc','JNJ_otc','MCD_otc','BABA_otc','COIN_otc','FDX_otc','NFLX_otc','PLTR_otc','AMD_otc','C_otc','XOM_otc','AMZN_otc','GME_otc','CSCO_otc'];
+const MODE=process.env.DATA_MODE==='binance'?'binance':(process.env.DATA_MODE==='provider'?'provider':'demo');
+const {DEFAULT_SYMBOLS,startBinanceFeed}=require('./binance-feed');
+const SYMBOLS=MODE==='binance'?DEFAULT_SYMBOLS:['AAPL_otc','AXP_otc','BA_otc','FB_otc','INTC_otc','JNJ_otc','MCD_otc','BABA_otc','COIN_otc','FDX_otc','NFLX_otc','PLTR_otc','AMD_otc','C_otc','XOM_otc','AMZN_otc','GME_otc','CSCO_otc'];
 const CANDLE_MS=5000,MAX_CANDLES=400,STALE_MS=12000;
 const states=new Map(),clients=new Set();
 const {DemoEngine}=require('./demo-engine');
@@ -16,7 +17,7 @@ function indicators(candles){const close=candles.map(c=>c.close);if(close.length
  const down=m<0&&hist<0&&hist<prevHist&&normalizedMom< -0.0001;
  return {macd:round(m),momentum:round(mom),osma:round(hist),signal:up?'UP':down?'DOWN':'WAIT',reason:up?'Three indicators align upward':down?'Three indicators align downward':'Indicators do not align'};
 }
-function state(symbol){if(!states.has(symbol))states.set(symbol,{symbol,candles:[],lastUpdate:0,source:MODE==='demo'?'SIMULATED':'PROVIDER',error:null,seq:0});return states.get(symbol);}
+function state(symbol){if(!states.has(symbol))states.set(symbol,{symbol,candles:[],lastUpdate:0,source:MODE==='demo'?'SIMULATED':MODE==='binance'?'BINANCE_SPOT':'PROVIDER',error:null,seq:0});return states.get(symbol);}
 function pushCandle(symbol,c){let s=state(symbol);let candle={time:Number(c.time),open:Number(c.open),high:Number(c.high),low:Number(c.low),close:Number(c.close)};
  if(!Object.values(candle).every(Number.isFinite)||candle.time<=0||candle.high<Math.max(candle.open,candle.close)||candle.low>Math.min(candle.open,candle.close))throw Error('Invalid OHLC candle');
  if(candle.time%5000!==0)throw Error('Candle timestamp must be aligned to 5 seconds');
@@ -102,7 +103,7 @@ if(url.pathname==='/api/otcharts-test'){
 }
   
 if(url.pathname==='/api/demo/status')return send(res,200,demoEngine.status());
- if(url.pathname==='/api/config')return send(res,200,{mode:MODE,symbols:SYMBOLS,candleSeconds:5,staleAfterSeconds:STALE_MS/1000,execution:'DISABLED',sourceConfigured:MODE==='provider'&&!!process.env.PROVIDER_CANDLES_URL&&!!process.env.PROVIDER_API_KEY,disclaimer:'No broker execution. External provider adapter only; source and symbol compatibility must be verified.'});
+ if(url.pathname==='/api/config')return send(res,200,{mode:MODE,symbols:SYMBOLS,candleSeconds:5,staleAfterSeconds:STALE_MS/1000,execution:'DISABLED',sourceConfigured:MODE==='binance'||(MODE==='provider'&&!!process.env.PROVIDER_CANDLES_URL&&!!process.env.PROVIDER_API_KEY),feed:MODE==='binance'?'Binance Spot aggregate trades':MODE==='demo'?'Synthetic test data':'External provider',disclaimer:MODE==='binance'?'LIVE BINANCE SPOT DATA — NOT POCKET OPTION OTC. Five-second candles are aggregated from live aggregate trades.': 'No broker execution. External provider adapter only; source and symbol compatibility must be verified.'});
  if(url.pathname==='/api/market'){const sym=url.searchParams.get('symbol');return SYMBOLS.includes(sym)?send(res,200,snapshot(sym)):send(res,400,{error:'Unsupported symbol'});}
  if(url.pathname==='/api/stream'){const sym=url.searchParams.get('symbol');if(!SYMBOLS.includes(sym))return send(res,400,{error:'Unsupported symbol'});
  res.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-store, no-transform',Connection:'keep-alive','X-Accel-Buffering':'no'});
@@ -110,6 +111,6 @@ if(url.pathname==='/api/demo/status')return send(res,200,demoEngine.status());
  const filename=files[url.pathname];if(!filename)return send(res,404,{error:'Not found'});const filepath=path.join(__dirname,'public',filename);
  fs.readFile(filepath,(err,data)=>{if(err)return send(res,500,{error:'File unavailable'});res.writeHead(200,{'Content-Type':filename.endsWith('.js')?'text/javascript; charset=utf-8':filename.endsWith('.css')?'text/css; charset=utf-8':'text/html; charset=utf-8','Cache-Control':'no-cache'});res.end(data)});
 });
-if(require.main===module){for(const sym of SYMBOLS)state(sym);if(MODE==='demo'){for(let i=0;i<70;i++)demoTickSeed(i);setInterval(demoTick,1000)}else{providerTick();setInterval(providerTick,5000)}setInterval(()=>{for(const c of clients){try{c.res.write(': keepalive\n\n');c.res.write(`event: market\ndata: ${JSON.stringify(snapshot(c.symbol))}\n\n`)}catch{clients.delete(c)}}},3000);server.listen(PORT,HOST,()=>console.log(`Fredo AI v3 (${MODE}) listening on http://${HOST}:${PORT}`));}
+if(require.main===module){for(const sym of SYMBOLS)state(sym);if(MODE==='demo'){for(let i=0;i<70;i++)demoTickSeed(i);setInterval(demoTick,1000)}else if(MODE==='binance'){startBinanceFeed({symbols:SYMBOLS,onCandle:(symbol,candle)=>{try{pushCandle(symbol,candle)}catch(err){state(symbol).error=err.message;broadcast(symbol)}},onStatus:status=>{for(const sym of SYMBOLS){const st=state(sym);st.feedStatus=status;if(!status.connected&&status.state!=='connecting')st.error='Live feed disconnected — waiting for reconnection';else if(status.connected)st.error=null;broadcast(sym)}}})}else{providerTick();setInterval(providerTick,5000)}setInterval(()=>{for(const c of clients){try{c.res.write(': keepalive\n\n');c.res.write(`event: market\ndata: ${JSON.stringify(snapshot(c.symbol))}\n\n`)}catch{clients.delete(c)}}},3000);server.listen(PORT,HOST,()=>console.log(`Fredo AI v3 (${MODE}) listening on http://${HOST}:${PORT}`));}
 function demoTickSeed(i){for(let idx=0;idx<SYMBOLS.length;idx++){const sym=SYMBOLS[idx],s=state(sym),open=s.candles.at(-1)?.close??(100+idx*28),close=round(Math.max(.01,open+(Math.random()-.5)*.18)),time=Math.floor(Date.now()/5000)*5000-(70-i)*5000;pushCandle(sym,{time,open,close,high:round(Math.max(open,close)+.02),low:round(Math.min(open,close)-.02)});}}
 module.exports={indicators,pushCandle,snapshot,state,server};
