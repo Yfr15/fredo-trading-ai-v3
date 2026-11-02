@@ -11,9 +11,9 @@ assert.equal(a.current.get('BTCUSDT').low,100);
 assert.equal(a.current.get('BTCUSDT').close,102);
 assert.equal(a.tick('BTCUSDT',99,9999),false);
 a.tick('BTCUSDT',103,15000,3);
-assert.equal(out.length,1);
-assert.equal(out[0].time,10000);
-assert.equal(out[0].volume,3);
+assert.equal(out.length,2); // one in-progress update, then the completed candle at rollover
+assert.equal(out[1].time,10000);
+assert.equal(out[1].volume,3);
 assert.equal(a.current.get('BTCUSDT').time,15000);
 assert.equal(a.tick('ETHUSDT',20,15001),true);
 console.log('PASS: UTC 5-second boundaries, OHLCV updates, rollover, and out-of-order rejection');
