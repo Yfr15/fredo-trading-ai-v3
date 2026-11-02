@@ -102,7 +102,7 @@ if(url.pathname==='/api/otcharts-test'){
 }
   
 if(url.pathname==='/api/demo/status')return send(res,200,demoEngine.status());
- if(url.pathname==='/api/config')return send(res,200,{mode:MODE,symbols:SYMBOLS,candleSeconds:5,staleAfterSeconds:STALE_MS/1000,disclaimer:'Research/demo only. No trading execution.'});
+ if(url.pathname==='/api/config')return send(res,200,{mode:MODE,symbols:SYMBOLS,candleSeconds:5,staleAfterSeconds:STALE_MS/1000,execution:'DISABLED',sourceConfigured:MODE==='provider'&&!!process.env.PROVIDER_CANDLES_URL&&!!process.env.PROVIDER_API_KEY,disclaimer:'No broker execution. External provider adapter only; source and symbol compatibility must be verified.'});
  if(url.pathname==='/api/market'){const sym=url.searchParams.get('symbol');return SYMBOLS.includes(sym)?send(res,200,snapshot(sym)):send(res,400,{error:'Unsupported symbol'});}
  if(url.pathname==='/api/stream'){const sym=url.searchParams.get('symbol');if(!SYMBOLS.includes(sym))return send(res,400,{error:'Unsupported symbol'});
  res.writeHead(200,{'Content-Type':'text/event-stream','Cache-Control':'no-store, no-transform',Connection:'keep-alive','X-Accel-Buffering':'no'});
