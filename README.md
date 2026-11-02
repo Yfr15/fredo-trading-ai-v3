@@ -48,3 +48,11 @@ The dashboard's demo panel can run simulated positions automatically when the se
 
 
 ## Autonomous engine build (feature branch)\n\nThe autonomous decision loop remains **synthetic demo only**. It now applies a separate quality gate before opening a virtual position: minimum history, valid and ordered OHLC, freshness, movement range, trend efficiency (to avoid choppy conditions), and agreement between the signal and recent price direction. Rejected setups are recorded as WAIT decisions. The gate is unit-tested separately. This is a research filter, not a proven profitable strategy; it has not been validated on out-of-sample broker data.\n\n## GPT Trading integration assessment (2 Nov 2026)\n\nGPT Trading Bot is an independent Telegram Mini App service. Its public website says its GPT Auto mode opens deals in Pocket Option through private API access, but its public pages do not publish a partner API, SDK, webhook, or supported third-party integration contract. It is therefore not currently safe or technically evidenced to wire directly into Fredo Trading AI. Do not share Pocket Option credentials or session tokens. A future integration requires written vendor documentation and confirmation from Pocket Option that the execution method is authorized. Until then, Fredo's execution state remains DISABLED.\n
+
+## Binance live market mode (feature branch)
+
+To use the public Binance Spot aggregate-trade WebSocket (no API key required for public market data), set `DATA_MODE=binance` in the Render service environment and redeploy. The server subscribes to the supported crypto symbols in `binance-feed.js`, aggregates incoming trades into UTC-aligned 5-second OHLCV candles, and streams updates to the browser over SSE.
+
+Supported initial symbols: BTCUSDT, ETHUSDT, BNBUSDT, SOLUSDT, XRPUSDT, DOGEUSDT, ADAUSDT, LINKUSDT. These are **Binance Spot reference prices, not Pocket Option OTC quotes**. No stocks, forex, or broker OTC instruments are included in this feed. No API key, broker login, or order endpoint is used. A disconnected or stale stream must display WAIT.
+
+The default mode remains synthetic demo until `DATA_MODE=binance` is explicitly set. Do not use synthetic demo results as live-market evidence. This feed integration is read-only and is not a trading recommendation.
