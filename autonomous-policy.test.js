@@ -1,0 +1,13 @@
+'use strict';
+const assert=require('node:assert/strict');
+const {evaluateSignal}=require('./autonomous-policy');
+const now=Date.now();
+const trend=Array.from({length:20},(_,i)=>{const p=100+i*.1;return {time:now-19*5000+i*5000,open:p,high:p+.03,low:p-.02,close:p+.02};});
+assert.equal(evaluateSignal({candles:trend,signal:'UP',now}).approved,true);
+assert.equal(evaluateSignal({candles:trend,signal:'DOWN',now}).action,'WAIT');
+const stale=trend.map(c=>({...c,time:c.time-60000}));
+assert.match(evaluateSignal({candles:stale,signal:'UP',now}).reason,/Stale/);
+const choppy=trend.map((c,i)=>({...c,close:100+(i%2)*.01,open:100+(i%2)*.01,high:100.02,low:99.99}));
+assert.equal(evaluateSignal({candles:choppy,signal:'UP',now}).action,'WAIT');
+assert.match(evaluateSignal({candles:trend.slice(0,5),signal:'UP',now}).reason,/Insufficient/);
+console.log('PASS: trend approval, disagreement rejection, stale-data rejection, choppy-market WAIT, and insufficient-history WAIT');
