@@ -1,0 +1,18 @@
+'use strict';
+const assert=require('node:assert/strict');
+const {backtestStrategy}=require('./strategy-lab');
+const candles=Array.from({length:60},(_,i)=>{const open=100+i,close=open+1;return {time:1700000000000+i*5000,open,high:close+.1,low:open-.1,close};});
+const result=backtestStrategy(candles,{minHistory:10,expiryCandles:2,payout:.92,signalFn:()=> 'UP'});
+assert.ok(result.sampleSize>0);
+assert.equal(result.wins,result.sampleSize);
+assert.equal(result.losses,0);
+assert.equal(result.winRate,100);
+assert.equal(result.breakEvenWinRate,52.08);
+assert.equal(result.researchOnly,true);
+const noLookahead=backtestStrategy(candles,{minHistory:10,expiryCandles:1,signalFn:history=>history.length<20?'WAIT':'UP'});
+assert.equal(noLookahead.sampleSize,60-1-19);
+const noSignals=backtestStrategy(candles,{minHistory:10,signalFn:()=> 'WAIT'});
+assert.equal(noSignals.sampleSize,0);
+assert.throws(()=>backtestStrategy(candles.slice().reverse(),{signalFn:()=> 'UP'}),/chronological/);
+assert.throws(()=>backtestStrategy(candles,{signalFn:null}),/signalFn/);
+console.log('PASS: chronological backtest, next-candle entry, expiry, metrics, no-signal and validation');

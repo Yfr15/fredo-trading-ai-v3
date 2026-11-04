@@ -1,1 +1,16 @@
-{"name":"fredo-trading-ai-v3","version":"3.0.0","private":true,"description":"Read-only OTC signal research dashboard","scripts":{"start":"node server.js","test":"node test.js"},"engines":{"node":">=18"}}
+{
+  "name": "fredo-trading-ai-v3",
+  "version": "3.0.0",
+  "private": true,
+  "description": "Read-only OTC signal research dashboard",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test.js && node autonomous-policy.test.js && node strategy-lab.test.js && node binance-feed.test.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "ws": "^8.18.3"
+  }
+}
