@@ -102,6 +102,29 @@ if(url.pathname==='/api/otcharts-test'){
   return;
 }
   
+if(url.pathname==='/api/backtest'){
+  if(MODE!=='binance')return send(res,409,{error:'Historical research endpoint requires DATA_MODE=binance. Synthetic/demo candles are not valid market evidence; provider feeds are not yet independently verified.'});
+  const sym=url.searchParams.get('symbol');
+  if(!SYMBOLS.includes(sym))return send(res,400,{error:'Unsupported Binance Spot symbol',supportedSymbols:SYMBOLS});
+  const expiryRaw=url.searchParams.get('expiry');
+  const expiry=expiryRaw===null?3:Number(expiryRaw);
+  const payoutRaw=url.searchParams.get('payout');
+  const payout=payoutRaw===null?0.92:Number(payoutRaw);
+  if(!Number.isInteger(expiry)||expiry<1||expiry>6)return send(res,400,{error:'expiry must be an integer from 1 to 6 candles'});
+  if(!Number.isFinite(payout)||payout<=0||payout>1)return send(res,400,{error:'payout must be greater than 0 and at most 1'});
+  const candles=state(sym).candles.slice();
+  if(candles.length<45)return send(res,200,{ok:false,symbol:sym,source:'BINANCE_SPOT',count:candles.length,required:45,message:'Collect at least 45 completed five-second candles before running the research test.'});
+  const {backtestStrategy}=require('./strategy-lab');
+  const result=backtestStrategy(candles,{
+    expiryCandles:expiry,payout,stake:1,minHistory:40,
+    signalFn:history=>indicators(history).signal
+  });
+  return send(res,200,{
+    ok:true,symbol:sym,source:'BINANCE_SPOT',market:'Binance Spot crypto reference prices — not Pocket Option OTC',
+    candleSeconds:5,candleCount:candles.length,expiryCandles:expiry,assumedPayout:payout,assumedStake:1,
+    result,warning:'Read-only historical research only. This rolling sample is small, may not represent future conditions, and does not include Pocket Option OTC quotes, payout changes, latency, or execution effects. It cannot authorize or place trades.'
+  });
+}
 if(url.pathname==='/api/demo/status')return send(res,200,demoEngine.status());
  if(url.pathname==='/api/config')return send(res,200,{mode:MODE,symbols:SYMBOLS,candleSeconds:5,staleAfterSeconds:STALE_MS/1000,execution:'DISABLED',sourceConfigured:MODE==='binance'||(MODE==='provider'&&!!process.env.PROVIDER_CANDLES_URL&&!!process.env.PROVIDER_API_KEY),feed:MODE==='binance'?'Binance Spot aggregate trades':MODE==='demo'?'Synthetic test data':'External provider',disclaimer:MODE==='binance'?'LIVE BINANCE SPOT DATA — NOT POCKET OPTION OTC. Five-second candles are aggregated from live aggregate trades.': 'No broker execution. External provider adapter only; source and symbol compatibility must be verified.'});
  if(url.pathname==='/api/market'){const sym=url.searchParams.get('symbol');return SYMBOLS.includes(sym)?send(res,200,snapshot(sym)):send(res,400,{error:'Unsupported symbol'});}
