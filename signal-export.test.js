@@ -1,0 +1,12 @@
+'use strict';
+const assert=require('node:assert/strict');
+const {buildSignalEnvelope}=require('./signal-export');
+const fresh={symbol:'AAPL_otc',source:'SIMULATED',mode:'demo',lastUpdate:1000,ageMs:100,stale:false,signal:'UP',reason:'Aligned',indicators:{macd:1}};
+const result=buildSignalEnvelope(fresh,1100);
+assert.equal(result.schema,'fredo.signal.v1');
+assert.equal(result.decision.action,'UP');
+assert.equal(result.execution.enabled,false);
+assert.equal(result.execution.orderSubmitted,false);
+assert.equal(buildSignalEnvelope({...fresh,stale:true,signal:'DOWN'}).decision.action,'WAIT');
+assert.equal(buildSignalEnvelope({...fresh,signal:'MAYBE'}).decision.action,'WAIT');
+console.log('PASS: stable signal envelope, stale-data WAIT, invalid-signal WAIT, read-only execution flag');
