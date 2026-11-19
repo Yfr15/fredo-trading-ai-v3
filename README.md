@@ -23,6 +23,12 @@ Set environment variables on the server (never in browser code):
 
 Expected response: `{"candles":[{"time":1760000000000,"open":100.0,"high":100.2,"low":99.9,"close":100.1}]}`. Time is Unix milliseconds aligned to a 5-second boundary. Each record represents a **completed** 5-second candle. The backend polls each instrument every 5 seconds and never sends the key to Safari. Actual provider schemas, streaming capabilities, symbol identifiers, rate limits and licensing must be confirmed before wiring them up. Do not connect to unauthorized or undocumented endpoints.
 
+## Read-only historical strategy research
+
+When the server is explicitly running in `DATA_MODE=binance`, the endpoint `GET /api/backtest?symbol=BTCUSDT&expiry=3&payout=0.92` runs the existing MACD/Momentum/OsMA signal rules against the most recent in-memory completed five-second Binance Spot candles. It enters at the next candle open and settles after the selected number of candles; it reports sample size, win rate with a Wilson 95% interval, break-even win rate, expectancy, net P/L and maximum drawdown. Supported expiry is 1–6 candles; assumed payout must be greater than 0 and at most 1.
+
+This endpoint deliberately refuses synthetic DEMO mode and the unverified generic provider mode. Binance Spot is free public reference data, not Pocket Option OTC data. A backtest result is descriptive research, not a prediction or permission to trade. The rolling in-memory sample is limited and does not model broker execution, changing payout, slippage, latency, or OTC price differences. It never places orders.
+
 ## Autonomous demo engine
 
 The dashboard's demo panel can run simulated positions automatically when the server is in its default synthetic DEMO mode. It records UP/DOWN entries, settles them after the selected number of 5-second candles, and reports demo P/L and observed win rate. Defaults: $1 virtual stake, 15-second expiry, $10 daily loss cap, three consecutive losses, and at most three open positions. Stake is capped at $5 and risk limits are configurable within conservative bounds. Start/stop/configuration endpoints are /api/demo/start, /api/demo/stop, and /api/demo/config; status is /api/demo/status.
