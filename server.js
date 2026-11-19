@@ -7,6 +7,7 @@ const SYMBOLS=MODE==='binance'?DEFAULT_SYMBOLS:['AAPL_otc','AXP_otc','BA_otc','F
 const CANDLE_MS=5000,MAX_CANDLES=400,STALE_MS=12000;
 const states=new Map(),clients=new Set();
 const {DemoEngine}=require('./demo-engine');
+const {buildSignalEnvelope}=require('./signal-export');
 const demoEngine=new DemoEngine();
 const round=n=>Math.round(n*100000)/100000;
 function ema(values,period){let out=Array(values.length).fill(null),alpha=2/(period+1),v=null;for(let i=0;i<values.length;i++){let x=values[i];if(!Number.isFinite(x))continue;v=v===null?x:v+alpha*(x-v);out[i]=v;}return out;}
@@ -102,7 +103,15 @@ if(url.pathname==='/api/otcharts-test'){
   return;
 }
   
-if(url.pathname==='/api/demo/status')return send(res,200,demoEngine.status());
+if(url.pathname==='/api/signals'){
+  return send(res,200,{schema:'fredo.signal-feed.v1',generatedAt:Date.now(),execution:{enabled:false,mode:'READ_ONLY'},signals:SYMBOLS.map(sym=>buildSignalEnvelope(snapshot(sym)))});
+ }
+ if(url.pathname.startsWith('/api/signals/')){
+  const sym=decodeURIComponent(url.pathname.slice('/api/signals/'.length));
+  if(!SYMBOLS.includes(sym))return send(res,404,{error:'Unsupported symbol'});
+  return send(res,200,buildSignalEnvelope(snapshot(sym)));
+ }
+ if(url.pathname==='/api/demo/status')return send(res,200,demoEngine.status());
  if(url.pathname==='/api/config')return send(res,200,{mode:MODE,symbols:SYMBOLS,candleSeconds:5,staleAfterSeconds:STALE_MS/1000,execution:'DISABLED',sourceConfigured:MODE==='binance'||(MODE==='provider'&&!!process.env.PROVIDER_CANDLES_URL&&!!process.env.PROVIDER_API_KEY),feed:MODE==='binance'?'Binance Spot aggregate trades':MODE==='demo'?'Synthetic test data':'External provider',disclaimer:MODE==='binance'?'LIVE BINANCE SPOT DATA — NOT POCKET OPTION OTC. Five-second candles are aggregated from live aggregate trades.': 'No broker execution. External provider adapter only; source and symbol compatibility must be verified.'});
  if(url.pathname==='/api/market'){const sym=url.searchParams.get('symbol');return SYMBOLS.includes(sym)?send(res,200,snapshot(sym)):send(res,400,{error:'Unsupported symbol'});}
  if(url.pathname==='/api/stream'){const sym=url.searchParams.get('symbol');if(!SYMBOLS.includes(sym))return send(res,400,{error:'Unsupported symbol'});
